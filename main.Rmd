@@ -1,0 +1,73 @@
+---
+title: "main"
+output: html_document
+date: "`r Sys.Date()`"
+---
+
+# WTI Oil
+## Financial Regression Analysis
+
+Group 2
+- Bunachita, Gino
+- Carlos, Jay Michael
+- Lloyd, Jessron
+- Reyes, Clark
+- Vergara, Iñigo
+
+A regression analysis on WTI Oil.
+
+Research question: Which financial and economic conditions are associated with WTI monthly log return? Refine this into a precise empirical question before estimating the final model.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r packages, message=FALSE, warning=FALSE}
+# install any missing packages (skips ones already installed)
+for (pkg in c("quantmod", "readxl")) {
+  if (!requireNamespace(pkg, quietly = TRUE)) install.packages(pkg)
+}
+library(quantmod)
+library(readxl)
+```
+
+```{r data-acquisition, message=FALSE}
+# ---- Settings ---------------------------------------------------------------
+START_DATE <- as.Date("2018-01-01")
+END_DATE   <- as.Date("2025-12-31")
+raw_dir <- file.path("data", "raw")
+
+# get fred through quantmod
+wti   <- getSymbols("DCOILWTICO", src = "FRED", auto.assign = FALSE)
+usd   <- getSymbols("DTWEXBGS",   src = "FRED", auto.assign = FALSE)
+vix   <- getSymbols("VIXCLS",     src = "FRED", auto.assign = FALSE)
+us10y <- getSymbols("DGS10",      src = "FRED", auto.assign = FALSE)
+
+# s&p 500
+gspc_raw <- getSymbols("^GSPC", src = "yahoo", from = START_DATE, to = END_DATE + 1,
+             auto.assign = FALSE)
+
+read_raw_csv <- function(file)
+  read.csv(file.path(raw_dir, file), check.names = FALSE,
+           na.strings = c("..", "..."))
+
+# psa cpi index
+cpi_index_back <- read_raw_csv("psa_cpi_index_1994-2017.csv")
+cpi_index_curr <- read_raw_csv("psa_cpi_index_2018-present.csv")
+
+# psa official yoy inflation
+cpi_yoy_back <- read_raw_csv("psa_cpi_yoy_1995-2018.csv")
+cpi_yoy_curr <- read_raw_csv("psa_cpi_yoy_2019-present.csv")
+
+# psa missi volume of production index
+vopi_back <- read_raw_csv("psa_missi_vopi_2001-2017.csv")
+vopi_curr <- read_raw_csv("psa_missi_vopi_2018-present.csv")
+
+# bsp peso per us dollar
+usdphp_raw <- read_excel(file.path(raw_dir, "bsp_pesodollar.xlsx"),
+                         sheet = "monthly", col_names = FALSE)
+
+# world gold council price averages
+gold_sheets <- excel_sheets(file.path(raw_dir, "wgc_gold_price_averages.xlsx"))
+```
