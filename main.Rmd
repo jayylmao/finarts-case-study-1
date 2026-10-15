@@ -141,7 +141,9 @@ usdphp$year <- na.locf(usdphp$year)                 # fill years down
 The WGC Gold Council has monthly averages so we can just take those.
 ```{r monthly-gold}
 gold <- read_excel("data/raw/wgc_gold_price_averages.xlsx", sheet = "Monthly_Avg", skip = 5)
-gold_m <- zoo(gold$USD, as.yearmon(gold[[3]]))
+names(gold)[1] <- "date"
+gold <- gold[!is.na(gold$date), ]
+gold_m <- zoo(gold$USD, as.yearmon(gold$date))
 ```
 
 ## Initial Regression Model
