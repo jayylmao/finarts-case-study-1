@@ -16,12 +16,12 @@ Group 2
 
 A regression analysis on WTI Oil.
 
-Research question: Which financial and economic conditions are associated with WTI monthly log return? Refine this into a precise empirical question before estimating the final model.
+Which global financial conditions are associated with WTI monthly log returns during 2018–2025, do Philippine macro conditions add explanatory power beyond them, and do these relationships change in market-stress months?  
+also what do you guys think about this research question? i tweaked it from the original
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
 
 ```{r packages, message=FALSE, warning=FALSE}
 # install any missing packages (skips ones already installed)
@@ -31,6 +31,15 @@ for (pkg in c("quantmod", "readxl")) {
 library(quantmod)
 library(readxl)
 ```
+
+## Executive Summary
+
+
+## Introduction
+
+
+## Data and Variables
+First, we acquire all the data, either from live sources like FRED and Yahoo! Finance for the U.S. macroeconomic variables and the S&P 500, or from downloaded files for the PSA information, the BSP Peso per USD, and the World Gold Council's price averages.
 
 ```{r data-acquisition, message=FALSE}
 # ---- Settings ---------------------------------------------------------------
@@ -45,7 +54,8 @@ vix   <- getSymbols("VIXCLS",     src = "FRED", auto.assign = FALSE)
 us10y <- getSymbols("DGS10",      src = "FRED", auto.assign = FALSE)
 
 # s&p 500
-gspc_raw <- getSymbols("^GSPC", src = "yahoo", from = START_DATE, to = END_DATE + 1,
+# -60 to avoid NA return on first month in time series.
+gspc_raw <- getSymbols("^GSPC", src = "yahoo", from = START_DATE - 60, to = END_DATE + 1,
              auto.assign = FALSE)
 
 read_raw_csv <- function(file)
@@ -71,3 +81,85 @@ usdphp_raw <- read_excel(file.path(raw_dir, "bsp_pesodollar.xlsx"),
 # world gold council price averages
 gold_sheets <- excel_sheets(file.path(raw_dir, "wgc_gold_price_averages.xlsx"))
 ```
+
+To build a regression model, every variable must be measured on the same unit of observation. CPI, BSP Peso per USD, and gold are measured monthly, thus we collapse the daily measurements to monthly to match. It is worth noting that
+this sacrifices the detail that daily observations would grant us, and limits us to 96 observations based on the specified observation period above.
+
+First, we start by getting the last non-missing price per month in the WTI and get the log return.
+```{r monthly-wti, message=FALSE}
+wti_m <- apply.monthly(na.omit(wti), last)
+index(wti_m) <- as.yearmon(index(wti_m)) # label by month
+wti_ret <- diff(log(wti_m))
+```
+
+Then, we do the same for the S&P 500.
+```{r monthly-sp500, message=FALSE}
+gspc_m <- apply.monthly(na.omit(Cl(gspc_raw)), last)
+index(gspc_m) <- as.yearmon(index(gspc_m))
+gspc_ret <- diff(log(gspc_m))
+```
+
+Then, we do the same for the USD Index.
+```{r monthly-usd, message=FALSE}
+usd_m <- apply.monthly(na.omit(usd), last)
+index(usd_m) <- as.yearmon(index(usd_m))
+usd_ret <- diff(log(usd_m))
+```
+
+For the DGS 10-year yield, we drop the `log` since it is an annual interest rate in percentage, unlike the above measurements.
+```{r monthly-dgs, message=FALSE}
+us10y_m <- apply.monthly(na.omit(us10y), last)
+index(us10y_m) <- as.yearmon(index(us10y_m))
+us10y_chg <- diff(us10y_m)
+```
+
+VIX is an index that measures how much swing traders expect over the next 30 days, so for this it is kept as a level by taking the monthly average instead of retaining only the last value.
+```{r monthly-vix, message=FALSE}
+vix_m <- apply.monthly(na.omit(vix), mean)
+index(vix_m) <- as.yearmon(index(vix_m))
+```
+
+The PSA data for CPI and manufacturing are in row format, so we have to turn that into a monthly series.
+```{r monthly-psa, message=FALSE}
+psa_to_xts <- function(df, row = 1, fmt) {
+  v    <- unlist(df[row, -(1:2)])                   # wide row -> named vector
+  keep <- !grepl("Ave|Annual", names(v))            # drop yearly summary columns
+  as.xts(zoo(as.numeric(v[keep]), as.yearmon(names(v)[keep], fmt)))
+}
+cpi_idx <- rbind(psa_to_xts(cpi_index_back, fmt = "%Y %b"),
+                 psa_to_xts(cpi_index_curr, fmt = "%Y %b"))
+cpi_yoy <- 100 * ROC(cpi_idx, n = 12, type = "discrete")   # YoY % from the index
+```
+
+The BSP Peso per USD has a different structure as well with the year only appearing on the January rows each year. The goal is the same, however, and we will turn that into a monthly series.
+```{r monthly-bsp, message=FALSE}
+usdphp <- read_excel("data/raw/bsp_pesodollar.xlsx", sheet = "monthly", range = "B8:E991",
+                     col_names = c("year", "month", "avg", "eop"), na = c("n.a.", ""))
+usdphp$year <- na.locf(usdphp$year)                 # fill years down
+```
+
+The WGC Gold Council has monthly averages so we can just take those.
+```{r monthly-gold}
+gold <- read_excel("data/raw/wgc_gold_price_averages.xlsx", sheet = "Monthly_Avg", skip = 5)
+gold_m <- zoo(gold$USD, as.yearmon(gold[[3]]))
+```
+
+## Initial Regression Model
+
+
+## Diagnostics
+
+
+## Model Improvement
+
+
+## Advanced Regression
+
+
+## Financial Interpretation
+
+
+## Recommendation and Conclusion
+
+
+## References
