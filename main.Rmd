@@ -1,23 +1,27 @@
 ---
-title: "main"
-output: html_document
+title: "WTI Oil Returns and Global and Philippine Financial Conditions"
+subtitle: "FINARTS C01 Group Case 1: Comprehensive Financial Regression Analysis"
+output:
+  html_document:
+    toc: true
 date: "`r Sys.Date()`"
 ---
 
-# WTI Oil
-## Financial Regression Analysis
-
 Group 2
+
 - Bunachita, Gino
+
 - Carlos, Jay Michael
+
 - Lloyd, Jessron
+
 - Reyes, Clark
+
 - Vergara, Iñigo
 
 A regression analysis on WTI Oil.
 
-Which global financial conditions are associated with WTI monthly log returns during 2018–2025, do Philippine macro conditions add explanatory power beyond them, and do these relationships change in market-stress months?  
-also what do you guys think about this research question? i tweaked it from the original
+Which global financial conditions are associated with WTI monthly log returns during 2018–2025, do Philippine macro conditions add explanatory power beyond them, and do these relationships change in market-stress months?
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -25,11 +29,14 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r packages, message=FALSE, warning=FALSE}
 # install any missing packages (skips ones already installed)
-for (pkg in c("quantmod", "readxl")) {
+for (pkg in c("quantmod", "readxl", "lmtest", "sandwich", "tseries")) {
   if (!requireNamespace(pkg, quietly = TRUE)) install.packages(pkg)
 }
 library(quantmod)
 library(readxl)
+library(lmtest)   # resettest, bptest, dwtest, bgtest, coeftest
+library(sandwich) # vcovHC (heteroskedasticity-robust standard errors)
+library(tseries)  # jarque.bera.test
 ```
 
 ## Executive Summary
@@ -54,7 +61,8 @@ vix   <- getSymbols("VIXCLS",     src = "FRED", auto.assign = FALSE)
 us10y <- getSymbols("DGS10",      src = "FRED", auto.assign = FALSE)
 
 # s&p 500
-# -60 to avoid NA return on first month in time series.
+# start 60 days early so that January 2018 has a December 2017 close to
+# compute its return from (otherwise the first month's return would be NA)
 gspc_raw <- getSymbols("^GSPC", src = "yahoo", from = START_DATE - 60, to = END_DATE + 1,
              auto.assign = FALSE)
 
@@ -66,26 +74,29 @@ read_raw_csv <- function(file)
 cpi_index_back <- read_raw_csv("psa_cpi_index_1994-2017.csv")
 cpi_index_curr <- read_raw_csv("psa_cpi_index_2018-present.csv")
 
-# psa official yoy inflation
+# psa official yoy inflation (used to check our own calculation)
 cpi_yoy_back <- read_raw_csv("psa_cpi_yoy_1995-2018.csv")
 cpi_yoy_curr <- read_raw_csv("psa_cpi_yoy_2019-present.csv")
 
-# psa missi volume of production index
+# psa missi volume of production index (row 1 = index, row 2 = psa yoy growth)
 vopi_back <- read_raw_csv("psa_missi_vopi_2001-2017.csv")
 vopi_curr <- read_raw_csv("psa_missi_vopi_2018-present.csv")
 
 # bsp peso per us dollar
-usdphp_raw <- read_excel(file.path(raw_dir, "bsp_pesodollar.xlsx"),
-                         sheet = "monthly", col_names = FALSE)
+usdphp <- read_excel(file.path(raw_dir, "bsp_pesodollar.xlsx"), sheet = "monthly",
+                     range = "B8:E991", col_names = c("year", "month", "avg", "eop"),
+                     na = c("n.a.", ""))
 
 # world gold council price averages
-gold_sheets <- excel_sheets(file.path(raw_dir, "wgc_gold_price_averages.xlsx"))
+gold <- read_excel(file.path(raw_dir, "wgc_gold_price_averages.xlsx"),
+                   sheet = "Monthly_Avg", skip = 5)
 ```
 
-To build a regression model, every variable must be measured on the same unit of observation. CPI, BSP Peso per USD, and gold are measured monthly, thus we collapse the daily measurements to monthly to match. It is worth noting that
-this sacrifices the detail that daily observations would grant us, and limits us to 96 observations based on the specified observation period above.
+### Unit of observation and sample
 
-First, we start by getting the last non-missing price per month in the WTI and get the log return.
+The unit of observation is one calendar month, from January 2018 to December 2025. To build a regression model, every variable must be measured on the same unit of observation. CPI, BSP Peso per USD, and gold are only available monthly, thus we collapse the daily FRED and Yahoo! Finance series to monthly to match. It is worth noting that this sacrifices the detail that daily observations would grant us, and limits us to 96 observations over the sample period.
+
+First, we start by getting the last non-missing price per month in the WTI and get the log return. FRED leaves U.S. market holidays blank, so `na.omit` drops those days before we take the month-end value.
 ```{r monthly-wti, message=FALSE}
 wti_m <- apply.monthly(na.omit(wti), last)
 index(wti_m) <- as.yearmon(index(wti_m)) # label by month
@@ -113,7 +124,7 @@ index(us10y_m) <- as.yearmon(index(us10y_m))
 us10y_chg <- diff(us10y_m)
 ```
 
-VIX is an index that measures how much swing traders expect over the next 30 days, so for this it is kept as a level by taking the monthly average instead of retaining only the last value.
+VIX is an index of the volatility that options traders expect over the next 30 days. Unlike the other global variables, we keep it as a level (the monthly average, as the case brief specifies) instead of a change: the question is how stressed the market was during the month, and the average captures that better than a single month-end reading.
 ```{r monthly-vix, message=FALSE}
 vix_m <- apply.monthly(na.omit(vix), mean)
 index(vix_m) <- as.yearmon(index(vix_m))
@@ -133,27 +144,465 @@ cpi_yoy <- 100 * ROC(cpi_idx, n = 12, type = "discrete")   # YoY % from the inde
 
 The BSP Peso per USD has a different structure as well with the year only appearing on the January rows each year. The goal is the same, however, and we will turn that into a monthly series.
 ```{r monthly-bsp, message=FALSE}
-usdphp <- read_excel("data/raw/bsp_pesodollar.xlsx", sheet = "monthly", range = "B8:E991",
-                     col_names = c("year", "month", "avg", "eop"), na = c("n.a.", ""))
 usdphp$year <- na.locf(usdphp$year)                 # fill years down
 ```
 
 The WGC Gold Council has monthly averages so we can just take those.
 ```{r monthly-gold}
-gold <- read_excel("data/raw/wgc_gold_price_averages.xlsx", sheet = "Monthly_Avg", skip = 5)
 names(gold)[1] <- "date"
 gold <- gold[!is.na(gold$date), ]
 gold_m <- zoo(gold$USD, as.yearmon(gold$date))
 ```
 
+### Variable definitions
+
+The remaining series are brought onto the same monthly footing as the rest. For the BSP rate we use the end-of-month value so that it lines up with the WTI closing price, and a positive log change means the peso weakened. The PSA volume of production index swings with the calendar (over 2010 to 2019 it fell about 6% on average every January and rose about 6% every March), so rather than a month-on-month change we use its 12-month log change, which is also how the CPI enters as year-on-year inflation. Log returns and growth rates are expressed in percent so that coefficients read as "percentage points of WTI return per unit of the regressor".
+
+The expected signs come from how each variable is linked to the oil market. A "?" means that there are channels pointing in both directions.
+
+| Variable | Group | Definition | Unit | Expected sign | Reasoning |
+|---|---|---|---|---|---|
+| `wti` | dependent | WTI monthly log return | % | | |
+| `sp500` | global | S&P 500 monthly log return | % | + | equity gains signal stronger growth and oil demand |
+| `usd` | global | broad USD index monthly log return | % | − | oil is priced in dollars, so a stronger dollar makes it dearer for other buyers |
+| `us10y` | global | monthly change in the 10-year Treasury yield | percentage points | ? | rising yields can signal stronger growth (+) or tighter financial conditions (−) |
+| `vix` | global | VIX, monthly average level | index points | − | high uncertainty goes with risk-off selling and weaker demand expectations |
+| `gold` | global | gold (USD) monthly log return | % | ? | a fellow commodity and inflation hedge (+), but also a safe haven in sell-offs (−) |
+| `cpi` | Philippine | CPI year-on-year inflation | % | ? | the Philippines is a price-taker, so any link runs mostly from oil to inflation |
+| `php` | Philippine | PHP per USD monthly log change (positive = peso weakens) | % | ? | as a net oil importer, higher oil prices weaken the peso (reverse direction) |
+| `vopi` | Philippine | manufacturing volume of production index, 12-month log change | % | ? | local output is too small to move the world price |
+
+```{r model-data}
+# remaining series on the same monthly footing
+usdphp_m   <- zoo(usdphp$eop, as.yearmon(paste(usdphp$year, usdphp$month), "%Y %B"))
+usdphp_ret <- diff(log(usdphp_m))
+gold_ret   <- diff(log(gold_m))
+vopi_idx   <- rbind(psa_to_xts(vopi_back, fmt = "%Y %B"),
+                    psa_to_xts(vopi_curr, fmt = "%Y %B"))
+vopi_chg   <- diff(log(vopi_idx), lag = 12)         # 12-month log change
+
+# one row per month, keeping only months where every series is observed
+series <- merge(as.zoo(wti_ret), as.zoo(gspc_ret), as.zoo(usd_ret), as.zoo(us10y_chg),
+                as.zoo(vix_m), as.zoo(gold_ret), as.zoo(cpi_yoy), usdphp_ret,
+                as.zoo(vopi_chg), all = FALSE)
+names(series) <- c("wti", "sp500", "usd", "us10y", "vix", "gold", "cpi", "php", "vopi")
+series <- window(series, start = as.yearmon(START_DATE), end = as.yearmon(END_DATE))
+
+model_df <- data.frame(month = index(series), coredata(series))
+rownames(model_df) <- format(model_df$month)        # so plots and tables label by month
+
+# returns and growth rates in percent; the rest are already in natural units
+pct_vars <- c("wti", "sp500", "usd", "gold", "php", "vopi")
+model_df[pct_vars] <- 100 * model_df[pct_vars]
+
+global_vars <- c("sp500", "usd", "us10y", "vix", "gold")
+ph_vars     <- c("cpi", "php", "vopi")
+
+stopifnot(!anyNA(model_df))
+nrow(model_df)
+```
+
+### Data-quality checks
+
+Before merging, we check that every series covers the whole sample with no gaps, so that the merge does not silently drop months.
+
+```{r check-missing}
+in_sample <- function(x) window(as.zoo(x), start = as.yearmon(START_DATE),
+                                end = as.yearmon(END_DATE))
+raw_series <- list(wti = wti_ret, sp500 = gspc_ret, usd = usd_ret, us10y = us10y_chg,
+                   vix = vix_m, gold = gold_ret, cpi = cpi_yoy, php = usdphp_ret,
+                   vopi = vopi_chg)
+knitr::kable(t(sapply(raw_series, function(x)
+  c(months = length(in_sample(x)), missing = sum(is.na(in_sample(x)))))))
+```
+
+All nine series have the full 96 months and no missing values, so the merge keeps every month in the sample.
+
+The CPI and manufacturing series are built by joining PSA's older and newer files and computing the growth rates ourselves, so we check them against the year-on-year rates that PSA publishes. A mismatch would mean the join between the two files is wrong.
+
+```{r check-psa, warning=FALSE}
+cpi_official  <- rbind(psa_to_xts(cpi_yoy_back, fmt = "%Y %b"),
+                       psa_to_xts(cpi_yoy_curr, fmt = "%Y %b"))
+vopi_official <- rbind(psa_to_xts(vopi_back, row = 2, fmt = "%Y %B"),
+                       psa_to_xts(vopi_curr, row = 2, fmt = "%Y %B"))
+vopi_pct <- 100 * (vopi_idx / lag(vopi_idx, 12) - 1)   # simple % change, as PSA reports it
+
+compare_psa <- function(ours, psa) {
+  d <- na.omit(merge(in_sample(ours), in_sample(psa)))
+  c(months_compared = nrow(d), max_abs_difference = max(abs(d[, 1] - d[, 2])))
+}
+knitr::kable(rbind("CPI inflation (% YoY)"           = compare_psa(cpi_yoy, cpi_official),
+                   "Manufacturing VoPI growth (% YoY)" = compare_psa(vopi_pct, vopi_official)),
+             digits = 2)
+```
+
+Both match PSA's published figures, and the small differences come from rounding (PSA reports CPI inflation to one decimal place, and the manufacturing index to two). PSA's file does not publish manufacturing growth rates for 2018, so those months could not be compared.
+
+The manufacturing variable has extreme values: a 12-month log change of `r round(min(model_df$vopi), 1)`% in `r rownames(model_df)[which.min(model_df$vopi)]` and `r round(max(model_df$vopi), 1)`% in `r rownames(model_df)[which.max(model_df$vopi)]`. These are not data errors. Under the 2020 lockdowns, the index fell to `r round(min(vopi_idx[format(index(vopi_idx), "%Y") == "2020"]), 1)` (against roughly 100 before the pandemic), and the 2021 growth rates are measured against that collapsed base. We keep these months, but they make `vopi` far more volatile than any other regressor, and they line up with the COVID months that dominate the diagnostics later on.
+
+One timing difference is worth noting. Gold enters as the return on WGC *monthly average* prices, while WTI and the other market series use *month-end* prices. Returns computed from averages are smoother and lag behind month-end returns, which weakens any same-month relationship between gold and oil.
+
+### Descriptive statistics
+
+```{r model-descriptives}
+desc <- sapply(model_df[c("wti", global_vars, ph_vars)],
+               function(x) c(mean = mean(x), sd = sd(x), min = min(x), max = max(x)))
+knitr::kable(t(desc), digits = 2)
+```
+
+Note the spread of WTI returns: a monthly standard deviation above 13% with a minimum near -78%, which is far from the behavior of a well-behaved Gaussian series. We keep this in mind for the diagnostics.
+
+```{r model-correlations}
+knitr::kable(cor(model_df[c("wti", global_vars, ph_vars)]), digits = 2)
+```
+
+WTI returns are most strongly correlated with the S&P 500 (`r round(cor(model_df$wti, model_df$sp500), 2)`), followed by the VIX (`r round(cor(model_df$wti, model_df$vix), 2)`), the dollar (`r round(cor(model_df$wti, model_df$usd), 2)`) and Treasury yields (`r round(cor(model_df$wti, model_df$us10y), 2)`). The Philippine variables are almost uncorrelated with WTI. Among the regressors, the strongest pair is the dollar and the peso (`r round(cor(model_df$usd, model_df$php), 2)`), which we revisit in the multicollinearity check.
+
+### Visualizations
+
+```{r model-plots, fig.height=8}
+plot(zoo(model_df[c("wti", global_vars, ph_vars)], model_df$month), nc = 3,
+     main = "Monthly series, 2018-2025", xlab = "", col = "steelblue")
+```
+
+The WTI panel is dominated by the COVID-19 episode: the March 2020 collapse and the May 2020 rebound are far larger than any other month. The same months show the S&P 500 at its worst return, the dollar at its largest gain and the VIX at its peak (`r round(max(model_df$vix), 1)`). The VIX stays elevated through the rest of 2020, with later spikes in 2022 and April 2025. Three of the five largest monthly increases in the 10-year yield come in 2022, as the Federal Reserve raised rates, and Philippine inflation peaks at `r round(max(model_df$cpi), 1)`% in `r rownames(model_df)[which.max(model_df$cpi)]`. The peso's two largest monthly depreciations are June and September 2022, when the dollar was also strong. The manufacturing panel shows the 2020 lockdown collapse and the 2021 base-effect rebound described above.
+
 ## Initial Regression Model
 
+Our baseline is an ordinary least squares (OLS) regression of the WTI monthly log return on the global financial conditions. We then add the Philippine macro conditions to the same model, so that comparing the two answers the second part of the research question directly. The stress-month question is left for the Advanced Regression section.
+
+The first model uses only the global financial conditions.
+
+```{r model-global}
+m_global <- lm(wti ~ sp500 + usd + us10y + vix + gold, data = model_df)
+summary(m_global)
+```
+
+The second adds the three Philippine variables.
+
+```{r model-full}
+m_full <- update(m_global, . ~ . + cpi + php + vopi)
+summary(m_full)
+```
+
+In the full model, equity returns, the dollar, Treasury yields and the VIX are all significant at the 5% level. Each coefficient is read ceteris paribus, that is, holding the other regressors constant. On that basis, a 1% rise in the S&P 500 is associated with a `r round(coef(m_full)["sp500"], 2)` percentage point higher WTI return, and a 1% rise in the broad dollar with a `r round(abs(coef(m_full)["usd"]), 2)` point lower one. Oil moves with risk appetite and against the currency it is priced in. With the other variables fixed, a one point rise in the VIX goes with a `r round(abs(coef(m_full)["vix"]), 2)` point lower return. The yield coefficient is large and positive (`r round(coef(m_full)["us10y"], 1)` points per percentage point of yield change), which reads more naturally as yields and oil both responding to growth news than as yields pushing oil up. Gold is not significant once the other conditions are in. These signs match the expectations in the variable table.
+
+The overall F-test rejects the null that all eight slope coefficients are zero (F = `r round(summary(m_full)$fstatistic[1], 2)`, p `r format.pval(pf(summary(m_full)$fstatistic[1], summary(m_full)$fstatistic[2], summary(m_full)$fstatistic[3], lower.tail = FALSE), eps = 0.001)`), so the regressors jointly explain WTI returns.
+
+### Statistical inference
+
+For each coefficient we test H₀: β = 0 (no association with WTI returns, holding the others constant) against the two-sided H₁: β ≠ 0, at the 5% level. The table below adds the 95% confidence interval for each coefficient, and the change in WTI return implied by a typical (one standard deviation) move in each regressor. That last column measures economic significance. For comparison, the standard deviation of WTI returns is `r round(sd(model_df$wti), 1)` percentage points.
+
+```{r model-inference}
+cs_full <- coef(summary(m_full))
+ci_full <- confint(m_full)
+x_vars  <- c(global_vars, ph_vars)
+inference <- data.frame(
+  term      = x_vars,
+  estimate  = cs_full[x_vars, "Estimate"],
+  ci_low    = ci_full[x_vars, 1],
+  ci_high   = ci_full[x_vars, 2],
+  p_value   = cs_full[x_vars, "Pr(>|t|)"],
+  sd_x      = sapply(model_df[x_vars], sd),
+  row.names = NULL
+)
+inference$effect_1sd <- inference$estimate * inference$sd_x
+knitr::kable(transform(inference, p_value = format.pval(p_value, digits = 2)), digits = 2,
+             col.names = c("term", "estimate", "95% CI low", "95% CI high", "p-value",
+                           "SD of regressor", "effect of 1 SD move (pp of WTI return)"))
+```
+
+The S&P 500, dollar, yield, VIX and peso coefficients reject H₀ at 5%, and their confidence intervals exclude zero. Gold, CPI and manufacturing do not, and their intervals comfortably include zero.
+
+A small p-value says an effect is unlikely to be zero, not that it is large, so we look at both. Here the statistically significant global factors are also economically large: a typical one standard deviation move in the S&P 500, the dollar or Treasury yields shifts the expected WTI return by roughly 4 to 5 percentage points, about a third of WTI's own monthly standard deviation. But the intervals are wide. The dollar's interval runs from `r round(ci_full["usd", 1], 1)` to `r round(ci_full["usd", 2], 1)`, so the data cannot tell a small dollar effect from a large one. The manufacturing coefficient shows the reverse case: it looks tiny (`r round(coef(m_full)["vopi"], 3)` per point), but because `vopi` swings so widely its one standard deviation effect is comparable to gold's, and it is still not statistically different from zero. A coefficient's size alone therefore says little until it is scaled by how much the regressor actually moves.
+
+### Model comparison: do the Philippine variables add explanatory power?
+
+Whether the Philippine block earns its place is a question about the three coefficients jointly, so we test it with a nested F-test (H₀: the CPI, peso and manufacturing coefficients are all zero) and also compare the information criteria, which penalize the extra parameters.
+
+```{r model-compare}
+f_test <- anova(m_global, m_full)
+f_test
+
+models <- list("Global only" = m_global, "Global + Philippine" = m_full)
+knitr::kable(data.frame(
+  model  = names(models),
+  k      = sapply(models, function(m) length(coef(m)) - 1),
+  R2     = sapply(models, function(m) summary(m)$r.squared),
+  adj_R2 = sapply(models, function(m) summary(m)$adj.r.squared),
+  AIC    = sapply(models, AIC),
+  BIC    = sapply(models, BIC),
+  row.names = NULL
+), digits = 3)
+```
+
+The global model explains `r round(100 * summary(m_global)$r.squared, 1)`% of the variation in WTI returns (`r round(100 * summary(m_global)$adj.r.squared, 1)`% adjusted). Adding the Philippine block raises R-squared to `r round(100 * summary(m_full)$r.squared, 1)`% but adjusted R-squared only to `r round(100 * summary(m_full)$adj.r.squared, 1)`%, the three new terms are not jointly significant (F-test p-value `r round(f_test$"Pr(>F)"[2], 3)`), and BIC prefers the global model while AIC is essentially a tie. Only the peso term is individually significant, and its sign should not be read as the peso driving oil. The causal direction more plausibly runs the other way, since the Philippines is a net oil importer and a higher oil price weakens the peso, and the peso is also correlated with the dollar and risk sentiment. So at this stage there is little evidence that Philippine macro conditions add explanatory power beyond the global ones.
+
+These are associations in a single sample, and the standard errors behind the stars assume the usual OLS conditions hold. The next section checks that.
 
 ## Diagnostics
+
+We run the diagnostics on the full model (`m_full`), since the global model is nested inside it and any problem in the shared terms will show up in both. All tests use a 5% level and, except where stated, have the assumption holding as the null hypothesis, so a small p-value signals a problem.
+
+### Multicollinearity
+
+The Philippine peso moves with the dollar and with global risk sentiment, so we check the variance inflation factors (VIF) first. As a rule of thumb, values above 5 to 10 are worrying.
+
+```{r diag-vif}
+X   <- model_df[c(global_vars, ph_vars)]
+vif <- sapply(names(X), function(v)
+  1 / (1 - summary(lm(reformulate(setdiff(names(X), v), v), data = X))$r.squared))
+round(vif, 2)
+```
+
+The largest VIF is `r round(max(vif), 2)` (`r names(which.max(vif))`), so multicollinearity is not a concern even between the dollar index and the peso.
+
+### Residual plots
+
+```{r diag-plots, fig.height=8}
+par(mfrow = c(2, 2))
+plot(m_full, which = c(1, 2, 3, 5), id.n = 3)   # points are labelled by month
+par(mfrow = c(1, 1))
+```
+
+Most of the points look reasonable, but two do not. In the residuals versus fitted panel (top left) the smoother bends at both ends, where only a few points sit, and March 2020 (fitted far below the rest) and May 2020 (a residual above 50) stand apart. The Q-Q plot (top right) shows the bulk of the residuals tracking the line while those same two months sit far off it at opposite ends. In the scale-location panel (bottom left) the smoother turns up on the left because of March 2020, and in the last panel (bottom right) March 2020 has by far the highest leverage and lies beyond the Cook's distance contour of 1.
+
+### Formal tests
+
+```{r diag-tests}
+diag_battery <- function(m) {
+  aux <- data.frame(fit = fitted(m))
+  tests <- list(
+    "Functional form"    = list("RESET (fitted^2, fitted^3)" = resettest(m, power = 2:3, type = "fitted")),
+    "Normality"          = list("Shapiro-Wilk"   = shapiro.test(resid(m)),
+                                "Jarque-Bera"    = jarque.bera.test(resid(m))),
+    "Homoskedasticity"   = list("Breusch-Pagan (regressors)"    = bptest(m),
+                                "Breusch-Pagan (fitted values)" = bptest(m, ~ fit + I(fit^2), data = aux)),
+    "No autocorrelation" = list("Durbin-Watson (lag 1)"     = dwtest(m),
+                                "Breusch-Godfrey (lags 1-3)" = bgtest(m, order = 3),
+                                "Ljung-Box (12 lags)"        = Box.test(resid(m), lag = 12, type = "Ljung-Box")))
+  do.call(rbind, lapply(names(tests), function(a)
+    data.frame(assumption = a,
+               test       = names(tests[[a]]),
+               statistic  = sapply(tests[[a]], function(t) unname(t$statistic)[1]),
+               p_value    = sapply(tests[[a]], function(t) t$p.value),
+               row.names  = NULL)))
+}
+
+fmt_p <- function(p) ifelse(p < 0.001, "<0.001", sprintf("%.3f", p))
+
+battery <- diag_battery(m_full)
+battery$verdict <- ifelse(battery$p_value < 0.05, "violated", "no evidence of violation")
+knitr::kable(transform(battery, statistic = round(statistic, 3), p_value = fmt_p(p_value)))
+```
+
+Reading the table against the plots:
+
+- Functional form: RESET rejects (p `r fmt_p(battery$p_value[1])`), so the linear specification leaves systematic structure in the residuals.
+- Normality: Both tests reject decisively. The residual skewness is `r round(mean(scale(resid(m_full))^3), 2)` and kurtosis `r round(mean(scale(resid(m_full))^4), 1)` against 0 and 3 for a normal. The Q-Q plot shows this comes from a couple of extreme months and not from the bulk of the sample, but with 96 observations the coefficient t-tests are only approximately valid and a few extreme residuals make that approximation worse.
+- Homoskedasticity: The evidence is borderline, with the regressor-based Breusch-Pagan test just above 5% (p = `r fmt_p(battery$p_value[4])`) and the fitted-value version just below (p = `r fmt_p(battery$p_value[5])`). We treat it as a likely problem and check it again after dealing with the outliers.
+- Autocorrelation: None of the three tests rejects, so there is no evidence of serial correlation in the residuals. This is the one assumption that is comfortably satisfied.
+
+```{r diag-acf, fig.height=3.5}
+par(mfrow = c(1, 2))
+plot(zoo(resid(m_full), model_df$month), type = "h", xlab = "", ylab = "residual (%)",
+     main = "Residuals over time")
+abline(h = 0, col = "grey50")
+acf(resid(m_full), main = "Residual ACF")
+par(mfrow = c(1, 1))
+```
+
+The ACF has a single spike at lag 2 (`r round(acf(resid(m_full), plot = FALSE)$acf[3], 2)`) that just crosses the 95% band, which is about what chance alone produces across a dozen lags, and the joint tests above do not reject. The time plot shows where the large residuals are: the two spikes in 2020 stand well clear of the rest of the sample.
+
+### Influential observations
+
+```{r diag-influence, fig.height=4}
+n <- nobs(m_full)
+p <- length(coef(m_full))
+
+infl <- data.frame(cooks_d  = cooks.distance(m_full),
+                   leverage = hatvalues(m_full),
+                   rstudent = rstudent(m_full),
+                   wti      = model_df$wti,
+                   fitted   = fitted(m_full))
+
+plot(m_full, which = 4, id.n = 5)
+abline(h = 4 / n, lty = 2, col = "grey50")
+knitr::kable(head(infl[order(-infl$cooks_d), ], 5), digits = 2)
+```
+
+Two months stand out. March 2020 has a Cook's distance of `r round(max(infl$cooks_d), 2)`, many times the usual 4/n cutoff of `r round(4 / n, 3)` and above 1, which means a single observation is materially moving the whole fit. It is the month of the COVID-19 demand collapse and the OPEC+ price war, with a WTI log return of `r round(infl["Mar 2020", "wti"], 1)`% (more than halving the price). It also has the highest leverage (`r round(max(infl$leverage), 2)` against a 2p/n cutoff of `r round(2 * p / n, 2)`), because the S&P 500 was at its lowest return, the VIX at its highest and the dollar at its largest gain of the whole sample in that same month. May 2020 is the opposite case, a rebound of `r round(infl["May 2020", "wti"], 1)`% that the model badly misses (studentized residual `r round(infl["May 2020", "rstudent"], 1)`). These are real market events and not data errors, so they should not be deleted without a reason. But we can ask how much they matter by refitting without them.
+
+```{r diag-leave-out}
+covid <- c("Mar 2020", "May 2020")
+m_wo  <- update(m_full, data = model_df[!rownames(model_df) %in% covid, ])
+
+cs_all <- coef(summary(m_full))
+cs_wo  <- coef(summary(m_wo))
+knitr::kable(data.frame(
+  term        = rownames(cs_all),
+  estimate    = round(cs_all[, "Estimate"], 3),
+  p_value     = fmt_p(cs_all[, "Pr(>|t|)"]),
+  estimate_wo = round(cs_wo[, "Estimate"], 3),
+  p_value_wo  = fmt_p(cs_wo[, "Pr(>|t|)"]),
+  row.names   = NULL
+), col.names = c("term", "estimate", "p-value", "estimate (excl.)", "p-value (excl.)"))
+
+tests_wo <- diag_battery(m_wo)
+knitr::kable(data.frame(
+  test              = battery$test,
+  `p-value`         = fmt_p(battery$p_value),
+  `p-value (excl.)` = fmt_p(tests_wo$p_value),
+  check.names = FALSE
+))
+```
+
+Removing just these two months changes the picture considerably. Adjusted R-squared drops from `r round(100 * summary(m_full)$adj.r.squared, 1)`% to `r round(100 * summary(m_wo)$adj.r.squared, 1)`%, the VIX and peso coefficients lose their significance, the dollar and S&P 500 coefficients shrink (the dollar only just stays significant), and the functional form, normality and heteroskedasticity tests no longer reject. In other words, much of the apparent fit and most of the assumption violations are produced by the two COVID months, while the S&P 500 and Treasury yield effects are robust to their removal. This is a sensitivity check and not our fix, and how to treat these months is a modeling decision for the next section.
+
+### Summary of diagnostics
+
+| Assumption | Result | Comment |
+|---|---|---|
+| No multicollinearity | holds | all VIFs are small |
+| No autocorrelation | holds | DW, Breusch-Godfrey and Ljung-Box all fail to reject |
+| Correct functional form | violated | RESET rejects, driven by the 2020 outliers |
+| Normal errors | violated | heavy tails, skewness and excess kurtosis from the same months |
+| Constant variance | borderline | one of two Breusch-Pagan tests rejects |
+| No influential points | violated | March 2020 has a Cook's distance above 1 |
+
+The OLS baseline therefore has the right signs for the global factors but unreliable standard errors and an inflated fit, because a small number of crisis months dominate the sample. The Model Improvement section addresses this directly.
 
 
 ## Model Improvement
 
+The diagnostics point to two related problems:
+
+1. **Unreliable standard errors.** Heteroskedasticity (error variance that is not constant across months) is borderline, and the residuals are far from normal. Either way, the usual OLS standard errors, and the p-values built on them, cannot be taken at face value.
+2. **Two months dominate the fit.** March and May 2020 are the source of the RESET, normality and influence failures, and they carry much of the apparent R-squared.
+
+Multicollinearity and autocorrelation are not problems, so they need no remedy. We address the two problems in turn and keep the original model for comparison.
+
+### Remedy 1: heteroskedasticity-robust standard errors
+
+Robust (heteroskedasticity-consistent, or HC) standard errors estimate each coefficient's uncertainty without assuming a constant error variance. They leave the coefficients themselves unchanged. We use the HC3 version, which is recommended for small samples because it gives more weight to the residuals of high-leverage observations, exactly the situation March 2020 creates.
+
+```{r improve-robust}
+rob_full <- coeftest(m_full, vcov = vcovHC(m_full, type = "HC3"))
+knitr::kable(data.frame(
+  term     = rownames(cs_full),
+  estimate = round(cs_full[, "Estimate"], 3),
+  se_ols   = round(cs_full[, "Std. Error"], 3),
+  p_ols    = fmt_p(cs_full[, "Pr(>|t|)"]),
+  se_hc3   = round(rob_full[, "Std. Error"], 3),
+  p_hc3    = fmt_p(rob_full[, "Pr(>|t|)"]),
+  row.names = NULL
+), col.names = c("term", "estimate", "SE (OLS)", "p (OLS)", "SE (HC3)", "p (HC3)"))
+```
+
+With robust standard errors, only the S&P 500 (p `r fmt_p(rob_full["sp500", 4])`) and Treasury yields (p `r fmt_p(rob_full["us10y", 4])`) remain significant at 5%. The VIX standard error roughly triples and its p-value rises to `r fmt_p(rob_full["vix", 4])`. The dollar (p `r fmt_p(rob_full["usd", 4])`) and the peso (p `r fmt_p(rob_full["php", 4])`) fall to the 10% level. Their apparent significance in the initial model rested on the few high-leverage COVID months. Robust standard errors correct the inference, but the coefficients are still estimated with those two months pulling on them, so this remedy alone is not enough.
+
+### Remedy 2: respecify the model with event dummies for March and May 2020
+
+Deleting the two months would throw away real data without saying why. Instead we add a dummy variable for each month: a variable equal to 1 in that month and 0 in every other. Each dummy absorbs its month's return completely, so the slope coefficients are estimated from the other 94 months. The dummy coefficients then report how far each month's return was from what financial conditions alone would predict.
+
+This is justified by what happened in the oil market itself, not just by the statistics. In March 2020, the OPEC+ talks collapsed on 6 March and Saudi Arabia started a price war just as lockdowns cut oil demand. In May 2020, prices rebounded as OPEC+'s record production cut took effect and economies began to reopen. These were supply decisions and physical demand shocks specific to oil, which equity returns, the dollar, yields and the VIX are not designed to capture.
+
+```{r improve-dummies}
+model_df$d_mar20 <- as.numeric(rownames(model_df) == "Mar 2020")
+model_df$d_may20 <- as.numeric(rownames(model_df) == "May 2020")
+
+m_full_d   <- update(m_full,   . ~ . + d_mar20 + d_may20, data = model_df)
+m_global_d <- update(m_global, . ~ . + d_mar20 + d_may20, data = model_df)
+summary(m_full_d)
+```
+
+The March 2020 dummy is `r round(coef(m_full_d)["d_mar20"], 1)` and the May 2020 dummy is `r round(coef(m_full_d)["d_may20"], 1)`: even after accounting for the collapse in equities and the spike in the VIX, WTI fell about 50 percentage points more than the financial conditions predict in March, and rose about 60 points more in May.
+
+We repeat the test of the Philippine block in the respecified model.
+
+```{r improve-ph-block}
+f_test_d <- anova(m_global_d, m_full_d)
+f_test_d
+```
+
+The Philippine variables remain jointly insignificant (p `r fmt_p(f_test_d$"Pr(>F)"[2])`), and the peso coefficient is no longer significant on its own either (p `r fmt_p(coef(summary(m_full_d))["php", 4])`). We therefore drop them and take the global model with the two event dummies (`m_global_d`) as the improved model. It also has the lowest AIC and BIC of the four specifications (see the comparison below).
+
+### Diagnostics on the improved model
+
+```{r improve-diagnostics}
+battery_d <- diag_battery(m_global_d)
+knitr::kable(data.frame(
+  assumption = battery$assumption,
+  test       = battery$test,
+  `p-value (initial, m_full)`       = fmt_p(battery$p_value),
+  `p-value (improved, m_global_d)`  = fmt_p(battery_d$p_value),
+  check.names = FALSE
+))
+```
+
+```{r improve-plots, fig.height=3.5, warning=FALSE}
+par(mfrow = c(1, 3))
+plot(m_global_d, which = 1:3, id.n = 3)
+par(mfrow = c(1, 1))
+
+cd_d <- cooks.distance(m_global_d)
+cd_d <- cd_d[is.finite(cd_d)]          # the two dummied months have no Cook's distance
+round(head(sort(cd_d, decreasing = TRUE), 3), 3)
+```
+
+Every assumption that failed now holds: RESET (p `r fmt_p(battery_d$p_value[1])`), both normality tests (p `r fmt_p(battery_d$p_value[2])` and `r fmt_p(battery_d$p_value[3])`) and both Breusch-Pagan tests (p `r fmt_p(battery_d$p_value[4])` and `r fmt_p(battery_d$p_value[5])`) no longer reject, and the autocorrelation tests still do not. The residual plots show no pattern, and the Q-Q plot follows the line. No remaining month is close to the Cook's distance of 1. The largest is `r names(cd_d)[which.max(cd_d)]` at `r round(max(cd_d), 2)`, the month of the U.S. tariff announcements, above the 4/n rule of thumb but nowhere near the influence March 2020 had.
+
+Since the Breusch-Pagan tests no longer reject, the ordinary standard errors are now reasonable. As a check we also compute robust (HC1) standard errors for the slopes. HC3 cannot be used here, because each dummied month has a leverage of exactly 1, and robust standard errors on the dummies themselves are not meaningful for the same reason.
+
+### Comparison of the initial and improved models
+
+```{r improve-compare}
+rob_d     <- coeftest(m_global_d, vcov = vcovHC(m_global_d, type = "HC1"))
+cs_d      <- coef(summary(m_global_d))
+all_terms <- union(rownames(cs_full), rownames(cs_d))
+pick      <- function(ct, col) ct[match(all_terms, rownames(ct)), col]
+slope_only <- !all_terms %in% c("d_mar20", "d_may20")
+options(knitr.kable.NA = "")             # blank cells for terms not in a model
+
+knitr::kable(data.frame(
+  term       = all_terms,
+  est_init   = round(pick(cs_full, "Estimate"), 3),
+  p_init     = fmt_p(pick(cs_full, "Pr(>|t|)")),
+  p_init_hc3 = fmt_p(pick(rob_full, "Pr(>|t|)")),
+  est_impr   = round(pick(cs_d, "Estimate"), 3),
+  p_impr     = fmt_p(pick(cs_d, "Pr(>|t|)")),
+  p_impr_hc1 = ifelse(slope_only, fmt_p(pick(rob_d, "Pr(>|t|)")), NA),
+  row.names  = NULL
+), col.names = c("term", "estimate (initial)", "p (initial, OLS)", "p (initial, HC3)",
+                 "estimate (improved)", "p (improved, OLS)", "p (improved, HC1)"))
+
+all_models <- list("Initial: global"              = m_global,
+                   "Initial: global + Philippine" = m_full,
+                   "Improved: global + Philippine + dummies" = m_full_d,
+                   "Improved: global + dummies"   = m_global_d)
+knitr::kable(data.frame(
+  model    = names(all_models),
+  k        = sapply(all_models, function(m) length(coef(m)) - 1),
+  adj_R2   = sapply(all_models, function(m) summary(m)$adj.r.squared),
+  resid_SE = sapply(all_models, sigma),
+  AIC      = sapply(all_models, AIC),
+  BIC      = sapply(all_models, BIC),
+  row.names = NULL
+), digits = 3)
+
+m_global_wo <- update(m_global, data = model_df[!rownames(model_df) %in% covid, ])
+```
+
+The adjusted R-squared of the improved model (`r round(100 * summary(m_global_d)$adj.r.squared, 1)`%) should not be read as a better explanation of oil returns. The dummies fit their two months perfectly, and those months contain much of WTI's total variation, so the R-squared jumps for a purely mechanical reason. A fairer measure of fit in ordinary months is the global model estimated without March and May 2020, whose adjusted R-squared is `r round(100 * summary(m_global_wo)$adj.r.squared, 1)`%. Our choice of the improved model rests instead on the diagnostics, the F-test on the Philippine block and the information criteria.
+
+The comparison has four implications:
+
+- Two relationships survive every check: Holding the other conditions constant, a 1% S&P 500 return goes with a `r round(coef(m_global_d)["sp500"], 2)` point higher WTI return (initially `r round(coef(m_full)["sp500"], 2)`), and a 1 percentage point rise in the 10-year yield with a `r round(coef(m_global_d)["us10y"], 1)` point higher return (initially `r round(coef(m_full)["us10y"], 1)`). Both are significant with ordinary and robust standard errors and are smaller than in the initial model, which had been inflated by the COVID months.
+- The dollar and VIX effects are fragile: Both keep the expected negative sign, but they shrink (dollar `r round(coef(m_global_d)["usd"], 2)`, VIX `r round(coef(m_global_d)["vix"], 2)`) and are not significant (p `r fmt_p(cs_d["usd", 4])` and `r fmt_p(cs_d["vix", 4])`). Their significance in the initial model came almost entirely from March and May 2020.
+- Philippine conditions add nothing once the global conditions are known: This answers the second part of the research question.
+- Most monthly oil-price variation is oil-specific: In ordinary months, financial conditions explain only about a fifth of WTI returns, and in the two COVID months the gap between actual and predicted returns was 50 to 60 percentage points. Supply decisions and physical demand shocks, which these regressors do not measure, drive most of the rest.
+
+The dummies also have a cost for the next step: the model now says nothing about March and May 2020 themselves. Any test of whether the relationships change in stress months in the Advanced Regression section therefore has to rely on the other high-VIX months, and should check that its result is not just a restatement of these two.
 
 ## Advanced Regression
 
