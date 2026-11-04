@@ -57,7 +57,7 @@ In stress months, the joint test of equal slopes does not reject (p 0.472).
 
 ## Introduction
 
-Its price reflects global growth, the value of the dollar and the appetite for risk. The Philippines is a net oil importer, so the price can matter for local inflation and the peso. This report tests whether the usual financial conditions explain monthly WTI returns, and whether Philippine conditions add anything.
+Oil is a global commodity. Its price reflects global growth, the value of the dollar and the appetite for risk. The Philippines is a net oil importer, so the price can matter for local inflation and the peso. This report tests whether the usual financial conditions explain monthly WTI returns, and whether Philippine conditions add anything.
 
 The sample runs from January 2018 to December 2025. It includes the 2020 oil collapse. On 6 March 2020, OPEC+ talks in Vienna failed after Russia refused deeper cuts. Saudi Arabia then cut its selling prices and the price war began, just as COVID-19 lockdowns cut demand. On 12 April 2020, OPEC+ agreed to cut output by 9.7 million barrels per day from 1 May. The sample also covers the 2022 rate-hiking cycle of the Federal Reserve. These episodes make oil returns volatile and far from normal. The report treats this as a core modeling problem.
 
