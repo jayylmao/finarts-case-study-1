@@ -41,13 +41,13 @@ library(tseries)  # jarque.bera.test
 
 ## Executive Summary
 
-This report studies what moves WTI crude oil returns. It uses 96 monthly observations from January 2018 to December 2025. It asks three questions. Which global financial conditions are associated with WTI returns? Do Philippine macro conditions add explanatory power beyond them? Do these relationships change in market-stress months?
+We study what moves WTI crude oil returns. We use 96 monthly observations from January 2018 to December 2025. We ask three questions. Which global financial conditions are associated with WTI returns? Do Philippine macro conditions add explanatory power beyond them? Do these relationships change in market-stress months?
 
 Two global conditions hold up under every check. A 1% S&P 500 return goes with a 0.65 point higher WTI return. A 1 percentage point rise in the 10-year Treasury yield goes with a 14.6 point higher return. Both stay significant with ordinary and robust standard errors. The dollar and the VIX carry the expected negative signs, but neither is significant once March and May 2020 are modeled separately.
 
 Philippine inflation, the peso and manufacturing output add nothing. The nested F-test does not reject (p 0.278).
 
-The initial model failed its diagnostics. The failures came from two COVID months, March and May 2020. Event dummies for those months fix the functional form, normality and heteroskedasticity problems. The improved model uses global conditions plus the two dummies.
+Our initial model failed its diagnostics. The failures came from two COVID months, March and May 2020. Event dummies for those months fix the functional form, normality and heteroskedasticity problems. Our improved model uses global conditions plus the two dummies.
 
 Fit is limited. In ordinary months, the global model explains 22.4% of WTI return variation (adjusted R-squared). Oil-specific supply and demand shocks explain the rest.
 
@@ -57,13 +57,13 @@ In stress months, the joint test of equal slopes does not reject (p 0.472).
 
 ## Introduction
 
-Oil is a global commodity. Its price reflects global growth, the value of the dollar and the appetite for risk. The Philippines is a net oil importer, so the price can matter for local inflation and the peso. This report tests whether the usual financial conditions explain monthly WTI returns, and whether Philippine conditions add anything.
+Oil is a global commodity. Its price reflects global growth, the value of the dollar and the appetite for risk. The Philippines is a net oil importer, so the price can matter for local inflation and the peso. We test whether the usual financial conditions explain monthly WTI returns, and whether Philippine conditions add anything.
 
-The sample runs from January 2018 to December 2025. It includes the 2020 oil collapse. On 6 March 2020, OPEC+ talks in Vienna failed after Russia refused deeper cuts. Saudi Arabia then cut its selling prices and the price war began, just as COVID-19 lockdowns cut demand. On 12 April 2020, OPEC+ agreed to cut output by 9.7 million barrels per day from 1 May. The sample also covers the 2022 rate-hiking cycle of the Federal Reserve. These episodes make oil returns volatile and far from normal. The report treats this as a core modeling problem.
+The sample runs from January 2018 to December 2025. It includes the 2020 oil collapse. On 6 March 2020, OPEC+ talks in Vienna failed after Russia refused deeper cuts. Saudi Arabia then cut its selling prices and the price war began, just as COVID-19 lockdowns cut demand. On 12 April 2020, OPEC+ agreed to cut output by 9.7 million barrels per day from 1 May. The sample also covers the 2022 rate-hiking cycle of the Federal Reserve. These episodes make oil returns volatile and far from normal. We treat this as a core modeling problem.
 
 The research question is: which global financial conditions are associated with WTI monthly log returns during 2018 to 2025, do Philippine macro conditions add explanatory power beyond them, and do these relationships change in market-stress months?
 
-The report proceeds in six steps. The Data and Variables section describes the nine monthly series and the checks on them. The Initial Regression Model section estimates a global model and a global plus Philippine model. The Diagnostics section tests the OLS assumptions. The Model Improvement section applies robust standard errors and event dummies. The Advanced Regression section tests the stress-month question. The last sections interpret the results and give recommendations.
+We proceed in six steps. First, we describe the nine monthly series and check them. Second, we estimate a global model and a global plus Philippine model. Third, we test the OLS assumptions. Fourth, we apply robust standard errors and event dummies. Fifth, we test the stress-month question. Last, we interpret the results and give recommendations.
 
 
 
@@ -700,13 +700,13 @@ Reading the results:
 
 ## Financial Interpretation
 
-This section reads the improved model, `m_global_d`. It holds the five global conditions and the March and May 2020 dummies. All coefficients are associations in one sample. They are not causal effects.
+In this section we read our improved model, `m_global_d`. It holds the five global conditions and the March and May 2020 dummies. We read all coefficients as associations in one sample, not causal effects.
 
 Equity returns. Oil moves with risk appetite. A 1% S&P 500 return goes with a `r round(coef(m_global_d)["sp500"], 2)` point higher WTI return. A one standard deviation move in the index (`r round(sd(model_df$sp500), 1)` points) shifts the expected WTI return by `r round(coef(m_global_d)["sp500"] * sd(model_df$sp500), 1)` points. The link survives robust standard errors. Strong equity months signal stronger growth and stronger oil demand.
 
 Treasury yields. A 1 percentage point rise in the 10-year yield goes with a `r round(coef(m_global_d)["us10y"], 1)` point higher WTI return. This does not mean higher borrowing costs lift oil. Growth news probably moves both. Yields work here as a growth signal.
 
-The dollar. The sign is negative, as expected. Oil is priced in dollars, so a stronger dollar makes it dearer for other buyers. The coefficient is `r round(coef(m_global_d)["usd"], 2)` and is not significant (p `r fmt_p(cs_d["usd", 4])`). The data cannot tell a small dollar effect from zero. The dollar looked strong in the initial model only because of March and May 2020.
+The dollar. The sign is negative, as expected. Oil is priced in dollars, so a stronger dollar makes it dearer for other buyers. The coefficient is `r round(coef(m_global_d)["usd"], 2)` and is not significant (p `r fmt_p(cs_d["usd", 4])`). We cannot tell a small dollar effect from zero with this data. The dollar looked strong in the initial model only because of March and May 2020.
 
 The VIX. The sign is negative, as expected. Higher uncertainty goes with risk-off selling. The coefficient is `r round(coef(m_global_d)["vix"], 2)` and is not significant (p `r fmt_p(cs_d["vix", 4])`). Its earlier significance also came from the two COVID months.
 
@@ -718,9 +718,9 @@ Event months. The March 2020 dummy is `r round(coef(m_full_d)["d_mar20"], 1)` an
 
 Fit. In ordinary months, the global model explains `r round(100 * summary(m_global_wo)$adj.r.squared, 1)`% of WTI return variation (adjusted). Financial conditions are a weak guide to monthly oil returns. Supply decisions and physical demand shocks drive most of the rest.
 
-Reliability. The initial standard errors were unreliable because two months dominated the fit. The improved model passes the diagnostics. It still rests on 96 observations. It also says nothing about March and May 2020, since the dummies absorb them.
+Reliability. Our initial standard errors were unreliable because two months dominated the fit. Our improved model passes the diagnostics. It still rests on 96 observations. It also says nothing about March and May 2020, since the dummies absorb them.
 
-Stress months. The stress-month model adds interactions for the S&P 500, dollar, yield and gold. The joint test `r ifelse(p_stress < 0.05, "finds that the slopes change", "finds no evidence that the slopes change")` in the top-quartile VIX months (p `r fmt_p(p_stress)`). Only `r n_stress` stress months remain after the two COVID dummies, so the test has limited power. For an investor, this means the S&P 500 and yield links found in the full sample are a fair guide in high-VIX months too, but the data cannot rule out a change.
+Stress months. The stress-month model adds interactions for the S&P 500, dollar, yield and gold. The joint test `r ifelse(p_stress < 0.05, "finds that the slopes change", "finds no evidence that the slopes change")` in the top-quartile VIX months (p `r fmt_p(p_stress)`). Only `r n_stress` stress months remain after the two COVID dummies, so the test has limited power. For an investor, we read this as follows: the S&P 500 and yield links we found in the full sample are a fair guide in high-VIX months too, but the data cannot rule out a change.
 
 
 
@@ -728,21 +728,21 @@ Stress months. The stress-month model adds interactions for the S&P 500, dollar,
 
 Recommendations
 
-1. Use the S&P 500 and the 10-year yield as the main financial co-movement signals for oil. They are the only two global conditions that stay significant under every check.
+1. We recommend using the S&P 500 and the 10-year yield as the main financial co-movement signals for oil. They are the only two global conditions that stay significant under every check.
 
-2. Do not rely on the dollar or the VIX to explain monthly oil returns. Their effects are not distinguishable from zero outside March and May 2020.
+2. We recommend not relying on the dollar or the VIX to explain monthly oil returns. Their effects are not distinguishable from zero outside March and May 2020.
 
-3. Do not add Philippine CPI, the peso or manufacturing output to an oil return model. They add no explanatory power. Treat oil as an external shock to Philippine inflation and the peso.
+3. We recommend not adding Philippine CPI, the peso or manufacturing output to an oil return model. They add no explanatory power. Treat oil as an external shock to Philippine inflation and the peso.
 
-4. Model event months separately. Use event dummies for extreme months and report robust standard errors. Do not delete the months, since they are real market events.
+4. We recommend modeling event months separately, with event dummies and robust standard errors. We do not delete the months, since they are real market events.
 
-5. Do not use this model alone to forecast oil. It explains about `r round(100 * summary(m_global_wo)$adj.r.squared, 1)`% of ordinary-month variation. Add oil-specific variables such as inventories and OPEC+ output decisions in future work.
+5. We recommend not using this model alone to forecast oil. It explains about `r round(100 * summary(m_global_wo)$adj.r.squared, 1)`% of ordinary-month variation. In future work, we would add oil-specific variables such as inventories and OPEC+ output decisions.
 
 Conclusion
 
-Three findings answer the research question. First, the S&P 500 and the 10-year yield are the global conditions associated with WTI returns. The dollar and the VIX are not robust. Second, Philippine macro conditions add no explanatory power beyond global ones. Third, the joint test of equal slopes in stress and calm months `r ifelse(p_stress < 0.05, "rejects", "does not reject")` (p `r fmt_p(p_stress)`).
+Our findings answer the research question in three parts. First, the S&P 500 and the 10-year yield are the global conditions associated with WTI returns. The dollar and the VIX are not robust. Second, Philippine macro conditions add no explanatory power beyond global ones. Third, the joint test of equal slopes in stress and calm months `r ifelse(p_stress < 0.05, "rejects", "does not reject")` (p `r fmt_p(p_stress)`).
 
-The initial OLS model overstated both fit and significance. Two COVID months drove its results. Event dummies and robust standard errors give a model that passes every diagnostic. The limits are clear. The sample has 96 months. The results are associations. Most oil price variation comes from factors outside the model.
+Our initial OLS model overstated both fit and significance. Two COVID months drove its results. Event dummies and robust standard errors give us a model that passes every diagnostic. The limits are clear. The sample has 96 months. The results are associations. Most oil price variation comes from factors outside the model.
 
 
 
