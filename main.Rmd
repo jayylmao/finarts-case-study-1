@@ -41,8 +41,30 @@ library(tseries)  # jarque.bera.test
 
 ## Executive Summary
 
+This report studies what moves WTI crude oil returns. It uses 96 monthly observations from January 2018 to December 2025. It asks three questions. Which global financial conditions are associated with WTI returns? Do Philippine macro conditions add explanatory power beyond them? Do these relationships change in market-stress months?
+
+Two global conditions hold up under every check. A 1% S&P 500 return goes with a 0.65 point higher WTI return. A 1 percentage point rise in the 10-year Treasury yield goes with a 14.6 point higher return. Both stay significant with ordinary and robust standard errors. The dollar and the VIX carry the expected negative signs, but neither is significant once March and May 2020 are modeled separately.
+
+Philippine inflation, the peso and manufacturing output add nothing. The nested F-test does not reject (p 0.278).
+
+The initial model failed its diagnostics. The failures came from two COVID months, March and May 2020. Event dummies for those months fix the functional form, normality and heteroskedasticity problems. The improved model uses global conditions plus the two dummies.
+
+Fit is limited. In ordinary months, the global model explains 22.4% of WTI return variation (adjusted R-squared). Oil-specific supply and demand shocks explain the rest.
+
+In stress months, the joint test of equal slopes does not reject (p 0.472).
+
+
 
 ## Introduction
+
+Oil is a global commodity. Its price reflects global growth, the value of the dollar and the appetite for risk. The Philippines is a net oil importer, so the price can matter for local inflation and the peso. This report tests whether the usual financial conditions explain monthly WTI returns, and whether Philippine conditions add anything.
+
+The sample runs from January 2018 to December 2025. It includes the 2020 oil collapse. On 6 March 2020, OPEC+ talks in Vienna failed after Russia refused deeper cuts. Saudi Arabia then cut its selling prices and the price war began, just as COVID-19 lockdowns cut demand. On 12 April 2020, OPEC+ agreed to cut output by 9.7 million barrels per day from 1 May. The sample also covers the 2022 rate-hiking cycle of the Federal Reserve. These episodes make oil returns volatile and far from normal. The report treats this as a core modeling problem.
+
+The research question is: which global financial conditions are associated with WTI monthly log returns during 2018 to 2025, do Philippine macro conditions add explanatory power beyond them, and do these relationships change in market-stress months?
+
+The report proceeds in six steps. The Data and Variables section describes the nine monthly series and the checks on them. The Initial Regression Model section estimates a global model and a global plus Philippine model. The Diagnostics section tests the OLS assumptions. The Model Improvement section applies robust standard errors and event dummies. The Advanced Regression section tests the stress-month question. The last sections interpret the results and give recommendations.
+
 
 
 ## Data and Variables
@@ -606,11 +628,159 @@ The dummies also have a cost for the next step: the model now says nothing about
 
 ## Advanced Regression
 
+The last part of the research question asks whether the relationships change in market-stress months. We test this with interaction terms. A stress dummy equals 1 in months when the VIX is in its top quartile and 0 otherwise. Interacting the dummy with each regressor lets the slopes differ in stress months. The VIX level enters on its own, because the stress dummy is built from it.
+
+March and May 2020 stay dummied, as in the improved model. This keeps the two extreme months from deciding the result. The stress months we test are the other high-VIX months.
+
+```{r adv-stress-def}
+vix_cut <- quantile(model_df$vix, 0.75)
+model_df$stress <- as.numeric(model_df$vix > vix_cut)
+covid_dummied <- model_df$d_mar20 == 1 | model_df$d_may20 == 1
+n_stress <- sum(model_df$stress == 1 & !covid_dummied)
+c(vix_cutoff = round(unname(vix_cut), 1), stress_months_excl_dummied = n_stress)
+```
+
+The cutoff is a VIX of `r round(vix_cut, 1)`. It leaves `r n_stress` stress months besides March and May 2020. This is a small group, so the tests have limited power.
+
+```{r adv-stress-model}
+m_stress <- lm(wti ~ sp500 + usd + us10y + gold + vix + stress +
+                 sp500:stress + usd:stress + us10y:stress + gold:stress +
+                 d_mar20 + d_may20, data = model_df)
+m_base <- update(m_global_d, data = model_df)
+summary(m_stress)
+```
+
+First we test all four interactions together. The null is that the slopes are the same in stress and calm months.
+
+```{r adv-stress-ftest}
+f_stress <- anova(m_base, m_stress)
+f_stress
+p_stress <- f_stress$"Pr(>F)"[2]
+```
+
+The joint F-test `r ifelse(p_stress < 0.05, "rejects", "does not reject")` the null of equal slopes (p `r fmt_p(p_stress)`).
+
+Next we check each interaction with robust standard errors. The dummied months have leverage of 1, so we use HC1, as in the improved model.
+
+```{r adv-stress-robust}
+rob_stress <- coeftest(m_stress, vcov = vcovHC(m_stress, type = "HC1"))
+int_terms <- c("sp500:stress", "usd:stress", "us10y:stress", "gold:stress")
+knitr::kable(data.frame(
+  term = int_terms,
+  estimate = round(coef(m_stress)[int_terms], 3),
+  se_hc1 = round(rob_stress[int_terms, "Std. Error"], 3),
+  p_hc1 = fmt_p(rob_stress[int_terms, "Pr(>|t|)"]),
+  row.names = NULL
+), col.names = c("interaction", "estimate", "SE (HC1)", "p (HC1)"))
+```
+
+The slope in stress months is the base slope plus the interaction. For the S&P 500, the calm-month slope is `r round(coef(m_stress)["sp500"], 2)` and the stress-month slope is `r round(coef(m_stress)["sp500"] + coef(m_stress)["sp500:stress"], 2)`. For the 10-year yield, the calm-month slope is `r round(coef(m_stress)["us10y"], 1)` and the stress-month slope is `r round(coef(m_stress)["us10y"] + coef(m_stress)["us10y:stress"], 1)`.
+
+Diagnostics on the stress model:
+
+```{r adv-stress-diag}
+battery_s <- diag_battery(m_stress)
+knitr::kable(data.frame(
+  test = battery_s$test,
+  `p-value` = fmt_p(battery_s$p_value),
+  check.names = FALSE
+))
+```
+
+Reading the results:
+
+- Joint test: `r ifelse(p_stress < 0.05, "The slopes differ between stress and calm months.", "There is no evidence that the slopes differ between stress and calm months.")`
+
+- Individual terms: No interaction is significant with HC1 standard errors. The smallest p-value is `r fmt_p(min(rob_stress[int_terms, "Pr(>|t|)"]))`. The S&P 500 interaction is `r round(coef(m_stress)["sp500:stress"], 2)` and the 10-year yield interaction is `r round(coef(m_stress)["us10y:stress"], 1)`. Both are positive, but both are small next to their standard errors.
+
+- Limits: The stress group is small. A non-rejection here does not prove the relationships are stable. It says the data cannot detect a change.
+
+
+
 
 ## Financial Interpretation
+
+This section reads the improved model, `m_global_d`. It holds the five global conditions and the March and May 2020 dummies. All coefficients are associations in one sample. They are not causal effects.
+
+Equity returns. Oil moves with risk appetite. A 1% S&P 500 return goes with a `r round(coef(m_global_d)["sp500"], 2)` point higher WTI return. A one standard deviation move in the index (`r round(sd(model_df$sp500), 1)` points) shifts the expected WTI return by `r round(coef(m_global_d)["sp500"] * sd(model_df$sp500), 1)` points. The link survives robust standard errors. Strong equity months signal stronger growth and stronger oil demand.
+
+Treasury yields. A 1 percentage point rise in the 10-year yield goes with a `r round(coef(m_global_d)["us10y"], 1)` point higher WTI return. This does not mean higher borrowing costs lift oil. Growth news probably moves both. Yields work here as a growth signal.
+
+The dollar. The sign is negative, as expected. Oil is priced in dollars, so a stronger dollar makes it dearer for other buyers. The coefficient is `r round(coef(m_global_d)["usd"], 2)` and is not significant (p `r fmt_p(cs_d["usd", 4])`). The data cannot tell a small dollar effect from zero. The dollar looked strong in the initial model only because of March and May 2020.
+
+The VIX. The sign is negative, as expected. Higher uncertainty goes with risk-off selling. The coefficient is `r round(coef(m_global_d)["vix"], 2)` and is not significant (p `r fmt_p(cs_d["vix", 4])`). Its earlier significance also came from the two COVID months.
+
+Gold. Gold is not significant. One reason is timing. Gold enters as a return on monthly average prices, while WTI uses month-end prices. This weakens any same-month link.
+
+Philippine conditions. CPI inflation, the peso and manufacturing output are not jointly significant. The Philippines is a price taker in oil. Any link runs from oil to local prices and the peso, not the other way. The peso looked significant in the initial model, but that result more plausibly reflects the reverse direction and its link to the dollar. For Philippine firms and policymakers, oil is an external shock. Local conditions do not help explain it.
+
+Event months. The March 2020 dummy is `r round(coef(m_full_d)["d_mar20"], 1)` and the May 2020 dummy is `r round(coef(m_full_d)["d_may20"], 1)` in the full model. Even after accounting for equities, the dollar, yields and the VIX, oil moved far more than financial conditions predict in those months. The causes were oil-specific. They were the OPEC+ breakdown and price war in March, and the record production cut in May.
+
+Fit. In ordinary months, the global model explains `r round(100 * summary(m_global_wo)$adj.r.squared, 1)`% of WTI return variation (adjusted). Financial conditions are a weak guide to monthly oil returns. Supply decisions and physical demand shocks drive most of the rest.
+
+Reliability. The initial standard errors were unreliable because two months dominated the fit. The improved model passes the diagnostics. It still rests on 96 observations. It also says nothing about March and May 2020, since the dummies absorb them.
+
+Stress months. The stress-month model adds interactions for the S&P 500, dollar, yield and gold. The joint test `r ifelse(p_stress < 0.05, "finds that the slopes change", "finds no evidence that the slopes change")` in the top-quartile VIX months (p `r fmt_p(p_stress)`). Only `r n_stress` stress months remain after the two COVID dummies, so the test has limited power. For an investor, this means the S&P 500 and yield links found in the full sample are a fair guide in high-VIX months too, but the data cannot rule out a change.
+
 
 
 ## Recommendation and Conclusion
 
+Recommendations
+
+1. Use the S&P 500 and the 10-year yield as the main financial co-movement signals for oil. They are the only two global conditions that stay significant under every check.
+
+2. Do not rely on the dollar or the VIX to explain monthly oil returns. Their effects are not distinguishable from zero outside March and May 2020.
+
+3. Do not add Philippine CPI, the peso or manufacturing output to an oil return model. They add no explanatory power. Treat oil as an external shock to Philippine inflation and the peso.
+
+4. Model event months separately. Use event dummies for extreme months and report robust standard errors. Do not delete the months, since they are real market events.
+
+5. Do not use this model alone to forecast oil. It explains about `r round(100 * summary(m_global_wo)$adj.r.squared, 1)`% of ordinary-month variation. Add oil-specific variables such as inventories and OPEC+ output decisions in future work.
+
+Conclusion
+
+Three findings answer the research question. First, the S&P 500 and the 10-year yield are the global conditions associated with WTI returns. The dollar and the VIX are not robust. Second, Philippine macro conditions add no explanatory power beyond global ones. Third, the joint test of equal slopes in stress and calm months `r ifelse(p_stress < 0.05, "rejects", "does not reject")` (p `r fmt_p(p_stress)`).
+
+The initial OLS model overstated both fit and significance. Two COVID months drove its results. Event dummies and robust standard errors give a model that passes every diagnostic. The limits are clear. The sample has 96 months. The results are associations. Most oil price variation comes from factors outside the model.
+
+
 
 ## References
+
+Data sources
+
+Bangko Sentral ng Pilipinas. Peso per US dollar exchange rate, monthly. Downloaded file bsp_pesodollar.xlsx.
+
+Federal Reserve Bank of St. Louis. FRED Economic Data. Series DCOILWTICO (WTI spot price), DTWEXBGS (broad US dollar index), VIXCLS (CBOE Volatility Index) and DGS10 (10-year Treasury yield). https://fred.stlouisfed.org.
+
+Philippine Statistics Authority. Consumer Price Index and Manufacturing Volume of Production Index (MISSI). Downloaded files in data/raw.
+
+World Gold Council. Gold price monthly averages. Downloaded file wgc_gold_price_averages.xlsx.
+
+Yahoo Finance. S&P 500 index (^GSPC), accessed through the quantmod package.
+
+Oil market events
+
+Bloomberg News. OPEC+ Talks Collapse, Threatening Russia-Saudi Oil Alliance. 6 March 2020. Published by Transport Topics. https://www.ttnews.com/articles/opec-talks-collapse-threatening-russia-saudi-oil-alliance
+
+CRISIL Research. Oil's not well. 18 March 2020. https://www.crisil.com/en/home/our-analysis/views-and-commentaries/2020/03/oils-not-well.html
+
+Hydrocarbon Engineering. OPEC+ agrees massive deal to cut oil output. 14 April 2020. https://www.hydrocarbonengineering.com/refining/14042020/opec-agrees-massive-deal-to-cut-oil-output/ (quotes the OPEC ministerial meeting statement of 12 April 2020).
+
+Gambrell, J., Associated Press. Global pact forged to contain oil price crash. 12 April 2020. https://www.wgbh.org/news/international-news/2020-04-12/global-pact-forged-to-contain-oil-price-crash
+
+Methods and software
+
+Breusch, T. S., and Pagan, A. R. (1979). A simple test for heteroscedasticity and random coefficient variation. Econometrica, 47(5), 1287-1294.
+
+MacKinnon, J. G., and White, H. (1985). Some heteroskedasticity-consistent covariance matrix estimators with improved finite sample properties. Journal of Econometrics, 29(3), 305-325.
+
+Ramsey, J. B. (1969). Tests for specification errors in classical linear least-squares regression analysis. Journal of the Royal Statistical Society, Series B, 31(2), 350-371.
+
+Zeileis, A. (2004). Econometric computing with HC and HAC covariance matrix estimators. Journal of Statistical Software, 11(10), 1-17.
+
+Zeileis, A., and Hothorn, T. (2002). Diagnostic checking in regression relationships. R News, 2(3), 7-10.
+
+R Core Team. R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna. Packages used: quantmod, readxl, lmtest, sandwich, tseries.
+
