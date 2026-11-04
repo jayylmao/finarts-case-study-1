@@ -748,29 +748,27 @@ The initial OLS model overstated both fit and significance. Two COVID months dro
 
 ## References
 
-Check each source below. Open it, confirm the title, author and date, then format it in the style your professor requires. Add your course textbook.
-
 Data sources
 
-Bangko Sentral ng Pilipinas. Peso per US dollar exchange rate, monthly. Downloaded file bsp_pesodollar.xlsx. Add access date.
+Bangko Sentral ng Pilipinas. Peso per US dollar exchange rate, monthly. Downloaded file bsp_pesodollar.xlsx.
 
-Federal Reserve Bank of St. Louis. FRED Economic Data. Series DCOILWTICO (WTI spot price), DTWEXBGS (broad US dollar index), VIXCLS (CBOE Volatility Index) and DGS10 (10-year Treasury yield). https://fred.stlouisfed.org. Add access date.
+Federal Reserve Bank of St. Louis. FRED Economic Data. Series DCOILWTICO (WTI spot price), DTWEXBGS (broad US dollar index), VIXCLS (CBOE Volatility Index) and DGS10 (10-year Treasury yield). https://fred.stlouisfed.org.
 
-Philippine Statistics Authority. Consumer Price Index and Manufacturing Volume of Production Index (MISSI). Downloaded files in data/raw. Add access date.
+Philippine Statistics Authority. Consumer Price Index and Manufacturing Volume of Production Index (MISSI). Downloaded files in data/raw.
 
-World Gold Council. Gold price monthly averages. Downloaded file wgc_gold_price_averages.xlsx. Add access date.
+World Gold Council. Gold price monthly averages. Downloaded file wgc_gold_price_averages.xlsx.
 
-Yahoo Finance. S&P 500 index (^GSPC), accessed through the quantmod package. Add access date.
+Yahoo Finance. S&P 500 index (^GSPC), accessed through the quantmod package.
 
 Oil market events
 
-Bloomberg News. OPEC+ Talks Collapse, Threatening Russia-Saudi Oil Alliance. March 2020. https://www.ttnews.com/articles/opec-talks-collapse-threatening-russia-saudi-oil-alliance. Confirm the exact date.
+Bloomberg News. OPEC+ Talks Collapse, Threatening Russia-Saudi Oil Alliance. 6 March 2020. Published by Transport Topics. https://www.ttnews.com/articles/opec-talks-collapse-threatening-russia-saudi-oil-alliance
 
 CRISIL Research. Oil's not well. 18 March 2020. https://www.crisil.com/en/home/our-analysis/views-and-commentaries/2020/03/oils-not-well.html
 
 Hydrocarbon Engineering. OPEC+ agrees massive deal to cut oil output. 14 April 2020. https://www.hydrocarbonengineering.com/refining/14042020/opec-agrees-massive-deal-to-cut-oil-output/ (quotes the OPEC ministerial meeting statement of 12 April 2020).
 
-Associated Press. Global pact forged to contain oil price crash. 12 April 2020. https://www.wgbh.org/news/international-news/2020-04-12/global-pact-forged-to-contain-oil-price-crash
+Gambrell, J., Associated Press. Global pact forged to contain oil price crash. 12 April 2020. https://www.wgbh.org/news/international-news/2020-04-12/global-pact-forged-to-contain-oil-price-crash
 
 Methods and software
 
