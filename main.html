@@ -433,8 +433,8 @@ library(sandwich) # vcovHC (heteroskedasticity-robust standard errors)
 library(tseries)  # jarque.bera.test</code></pre>
 <div id="executive-summary" class="section level2">
 <h2>Executive Summary</h2>
-<p>I study what moves WTI crude oil returns. I use 96 monthly
-observations from January 2018 to December 2025. I ask three questions.
+<p>We study what moves WTI crude oil returns. We use 96 monthly
+observations from January 2018 to December 2025. We ask three questions.
 Which global financial conditions are associated with WTI returns? Do
 Philippine macro conditions add explanatory power beyond them? Do these
 relationships change in market-stress months?</p>
@@ -446,9 +446,9 @@ dollar and the VIX carry the expected negative signs, but neither is
 significant once March and May 2020 are modeled separately.</p>
 <p>Philippine inflation, the peso and manufacturing output add nothing.
 The nested F-test does not reject (p 0.278).</p>
-<p>My initial model failed its diagnostics. The failures came from two
+<p>Our initial model failed its diagnostics. The failures came from two
 COVID months, March and May 2020. Event dummies for those months fix the
-functional form, normality and heteroskedasticity problems. My improved
+functional form, normality and heteroskedasticity problems. Our improved
 model uses global conditions plus the two dummies.</p>
 <p>Fit is limited. In ordinary months, the global model explains 22.4%
 of WTI return variation (adjusted R-squared). Oil-specific supply and
@@ -461,7 +461,7 @@ demand shocks explain the rest.</p>
 <p>Oil is a global commodity. Its price reflects global growth, the
 value of the dollar and the appetite for risk. The Philippines is a net
 oil importer, so the price can matter for local inflation and the peso.
-I test whether the usual financial conditions explain monthly WTI
+We test whether the usual financial conditions explain monthly WTI
 returns, and whether Philippine conditions add anything.</p>
 <p>The sample runs from January 2018 to December 2025. It includes the
 2020 oil collapse. On 6 March 2020, OPEC+ talks in Vienna failed after
@@ -469,17 +469,18 @@ Russia refused deeper cuts. Saudi Arabia then cut its selling prices and
 the price war began, just as COVID-19 lockdowns cut demand. On 12 April
 2020, OPEC+ agreed to cut output by 9.7 million barrels per day from 1
 May. The sample also covers the 2022 rate-hiking cycle of the Federal
-Reserve. These episodes make oil returns volatile and far from normal. I
-treat this as a core modeling problem.</p>
+Reserve. These episodes make oil returns volatile and far from normal.
+We treat this as a core modeling problem.</p>
 <p>The research question is: which global financial conditions are
 associated with WTI monthly log returns during 2018 to 2025, do
 Philippine macro conditions add explanatory power beyond them, and do
 these relationships change in market-stress months?</p>
-<p>I proceed in six steps. First, I describe the nine monthly series and
-check them. Second, I estimate a global model and a global plus
-Philippine model. Third, I test the OLS assumptions. Fourth, I apply
-robust standard errors and event dummies. Fifth, I test the stress-month
-question. Last, I interpret the results and give recommendations.</p>
+<p>We proceed in six steps. First, we describe the nine monthly series
+and check them. Second, we estimate a global model and a global plus
+Philippine model. Third, we test the OLS assumptions. Fourth, we apply
+robust standard errors and event dummies. Fifth, we test the
+stress-month question. Last, we interpret the results and give
+recommendations.</p>
 </div>
 <div id="data-and-variables" class="section level2">
 <h2>Data and Variables</h2>
@@ -2402,13 +2403,13 @@ that its result is not just a restatement of these two.</p>
 <div id="advanced-regression" class="section level2">
 <h2>Advanced Regression</h2>
 <p>The last part of the research question asks whether the relationships
-change in market-stress months. I test this with interaction terms. A
+change in market-stress months. We test this with interaction terms. A
 stress dummy equals 1 in months when the VIX is in its top quartile and
 0 otherwise. Interacting the dummy with each regressor lets the slopes
 differ in stress months. The VIX level enters on its own, because the
 stress dummy is built from it.</p>
 <p>March and May 2020 stay dummied, as in the improved model. This keeps
-the two extreme months from deciding the result. The stress months I
+the two extreme months from deciding the result. The stress months we
 test are the other high-VIX months.</p>
 <pre class="r"><code>vix_cut &lt;- quantile(model_df$vix, 0.75)
 model_df$stress &lt;- as.numeric(model_df$vix &gt; vix_cut)
@@ -2456,7 +2457,7 @@ summary(m_stress)</code></pre>
 ## Residual standard error: 7.966 on 83 degrees of freedom
 ## Multiple R-squared:  0.6985, Adjusted R-squared:  0.6549 
 ## F-statistic: 16.02 on 12 and 83 DF,  p-value: &lt; 2.2e-16</code></pre>
-<p>First, I test all four interactions together. The null is that the
+<p>First we test all four interactions together. The null is that the
 slopes are the same in stress and calm months.</p>
 <pre class="r"><code>f_stress &lt;- anova(m_base, m_stress)
 f_stress</code></pre>
@@ -2471,8 +2472,8 @@ f_stress</code></pre>
 <pre class="r"><code>p_stress &lt;- f_stress$&quot;Pr(&gt;F)&quot;[2]</code></pre>
 <p>The joint F-test does not reject the null of equal slopes (p
 0.472).</p>
-<p>Next, I check each interaction with robust standard errors. The
-dummied months have leverage of 1, so I use HC1, as in the improved
+<p>Next we check each interaction with robust standard errors. The
+dummied months have leverage of 1, so we use HC1, as in the improved
 model.</p>
 <pre class="r"><code>rob_stress &lt;- coeftest(m_stress, vcov = vcovHC(m_stress, type = &quot;HC1&quot;))</code></pre>
 <pre><code>## Warning in meatHC(x, type = type, omega = omega): HC1 covariances
@@ -2590,9 +2591,9 @@ change.</p></li>
 </div>
 <div id="financial-interpretation" class="section level2">
 <h2>Financial Interpretation</h2>
-<p>In this section I read my improved model, <code>m_global_d</code>. It
-holds the five global conditions and the March and May 2020 dummies. I
-read all coefficients as associations in one sample, not causal
+<p>In this section we read our improved model, <code>m_global_d</code>.
+It holds the five global conditions and the March and May 2020 dummies.
+We read all coefficients as associations in one sample, not causal
 effects.</p>
 <p>Equity returns. Oil moves with risk appetite. A 1% S&amp;P 500 return
 goes with a 0.65 point higher WTI return. A one standard deviation move
@@ -2605,7 +2606,7 @@ costs lift oil. Growth news probably moves both. Yields work here as a
 growth signal.</p>
 <p>The dollar. The sign is negative, as expected. Oil is priced in
 dollars, so a stronger dollar makes it dearer for other buyers. The
-coefficient is -1.04 and is not significant (p 0.132). I cannot tell a
+coefficient is -1.04 and is not significant (p 0.132). We cannot tell a
 small dollar effect from zero with this data. The dollar looked strong
 in the initial model only because of March and May 2020.</p>
 <p>The VIX. The sign is negative, as expected. Higher uncertainty goes
@@ -2632,49 +2633,49 @@ May.</p>
 return variation (adjusted). Financial conditions are a weak guide to
 monthly oil returns. Supply decisions and physical demand shocks drive
 most of the rest.</p>
-<p>Reliability. My initial standard errors were unreliable because two
-months dominated the fit. My improved model passes the diagnostics. It
+<p>Reliability. Our initial standard errors were unreliable because two
+months dominated the fit. Our improved model passes the diagnostics. It
 still rests on 96 observations. It also says nothing about March and May
 2020, since the dummies absorb them.</p>
 <p>Stress months. The stress-month model adds interactions for the
 S&amp;P 500, dollar, yield and gold. The joint test finds no evidence
 that the slopes change in the top-quartile VIX months (p 0.472). Only 22
 stress months remain after the two COVID dummies, so the test has
-limited power. For an investor, I read this as follows: the S&amp;P 500
-and yield links I found in the full sample are a fair guide in high-VIX
+limited power. For an investor, we read this as follows: the S&amp;P 500
+and yield links we found in the full sample are a fair guide in high-VIX
 months too, but the data cannot rule out a change.</p>
 </div>
 <div id="recommendation-and-conclusion" class="section level2">
 <h2>Recommendation and Conclusion</h2>
 <p>Recommendations</p>
 <ol style="list-style-type: decimal">
-<li><p>I recommend using the S&amp;P 500 and the 10-year yield as the
+<li><p>We recommend using the S&amp;P 500 and the 10-year yield as the
 main financial co-movement signals for oil. They are the only two global
 conditions that stay significant under every check.</p></li>
-<li><p>I recommend not relying on the dollar or the VIX to explain
+<li><p>We recommend not relying on the dollar or the VIX to explain
 monthly oil returns. Their effects are not distinguishable from zero
 outside March and May 2020.</p></li>
-<li><p>I recommend not adding Philippine CPI, the peso or manufacturing
+<li><p>We recommend not adding Philippine CPI, the peso or manufacturing
 output to an oil return model. They add no explanatory power. Treat oil
 as an external shock to Philippine inflation and the peso.</p></li>
-<li><p>I recommend modeling event months separately. Use event dummies
-for extreme months and report robust standard errors. Do not delete the
-months, since they are real market events.</p></li>
-<li><p>I recommend not using this model alone to forecast oil. It
-explains about 22.4% of ordinary-month variation. In future work, I
+<li><p>We recommend modeling event months separately, with event dummies
+and robust standard errors. We do not delete the months, since they are
+real market events.</p></li>
+<li><p>We recommend not using this model alone to forecast oil. It
+explains about 22.4% of ordinary-month variation. In future work, we
 would add oil-specific variables such as inventories and OPEC+ output
 decisions.</p></li>
 </ol>
 <p>Conclusion</p>
-<p>My findings answer the research question in three parts. First, the
+<p>Our findings answer the research question in three parts. First, the
 S&amp;P 500 and the 10-year yield are the global conditions associated
 with WTI returns. The dollar and the VIX are not robust. Second,
 Philippine macro conditions add no explanatory power beyond global ones.
 Third, the joint test of equal slopes in stress and calm months does not
 reject (p 0.472).</p>
-<p>My initial OLS model overstated both fit and significance. Two COVID
+<p>Our initial OLS model overstated both fit and significance. Two COVID
 months drove its results. Event dummies and robust standard errors give
-me a model that passes every diagnostic. The limits are clear. The
+us a model that passes every diagnostic. The limits are clear. The
 sample has 96 months. The results are associations. Most oil price
 variation comes from factors outside the model.</p>
 </div>
