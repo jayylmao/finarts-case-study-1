@@ -744,7 +744,9 @@ Our findings answer the research question in three parts. First, the S&P 500 and
 
 Our initial OLS model overstated both fit and significance. Two COVID months drove its results. Event dummies and robust standard errors give us a model that passes every diagnostic. The limits are clear. The sample has 96 months. The results are associations. Most oil price variation comes from factors outside the model.
 
+Overall, the results confirm a link between global financial conditions and the WTI monthly return, especially the S&P 500 and the US 10-year Treasury yield. But, the dollar and VIX are not statistically significant once the outliers of March and May 2020 are removed from the sample. Philippine inflation, the peso, and manufacturing output do not provide any explanatory value either. Also, the stress-month test results do not find convincing evidence that the relationship varies during periods of high VIX-however, a small sample of stress points makes it difficult to interpret this finding.
 
+Nevertheless, these results indicate that financial variables can only account for a small part of oil price movement in typical months. Oil-specific factors like movements in demand and supply, inventory, and decisions by OPEC+ have still to matter. Although not definitive, the evidence suggests correlation, rather than ceteris paribus causality. On the whole, while financial indicators are a good proxy for oil prices, OPEC+ should keep an eye on them for operational purposes, even if not for forecasting.
 
 ## References
 
