@@ -1,10 +1,12 @@
 ---
 title: "WTI Oil Returns and Global and Philippine Financial Conditions"
-subtitle: "FINARTS C01 Group Case 1: Comprehensive Financial Regression Analysis"
+subtitle: 'FINARTS C01 Group Case 1: Comprehensive Financial Regression Analysis'
+date: "`r Sys.Date()`"
 output:
   html_document:
     toc: true
-date: "`r Sys.Date()`"
+  pdf_document:
+    toc: true
 ---
 
 Group 2
@@ -88,11 +90,27 @@ START_DATE <- as.Date("2018-01-01")
 END_DATE   <- as.Date("2025-12-31")
 raw_dir <- file.path("data", "raw")
 
-# get fred through quantmod
-wti   <- getSymbols("DCOILWTICO", src = "FRED", auto.assign = FALSE)
-usd   <- getSymbols("DTWEXBGS",   src = "FRED", auto.assign = FALSE)
-vix   <- getSymbols("VIXCLS",     src = "FRED", auto.assign = FALSE)
-us10y <- getSymbols("DGS10",      src = "FRED", auto.assign = FALSE)
+# fred's server intermittently drops quantmod's connection (HTTP/2 stream
+# errors), so we retry and fall back to a plain csv download
+get_fred <- function(id, tries = 5) {
+  for (i in seq_len(tries)) {
+    out <- try(getSymbols(id, src = "FRED", auto.assign = FALSE), silent = TRUE)
+    if (!inherits(out, "try-error")) return(out)
+    out <- try({
+      df <- read.csv(paste0("https://fred.stlouisfed.org/graph/fredgraph.csv?id=", id),
+                     na.strings = ".")
+      xts(df[[2]], as.Date(df[[1]]), dimnames = list(NULL, id))
+    }, silent = TRUE)
+    if (!inherits(out, "try-error")) return(out)
+    Sys.sleep(2 * i)
+  }
+  stop("Unable to download ", id, " from FRED")
+}
+
+wti   <- get_fred("DCOILWTICO")
+usd   <- get_fred("DTWEXBGS")
+vix   <- get_fred("VIXCLS")
+us10y <- get_fred("DGS10")
 
 # s&p 500
 # start 60 days early so that January 2018 has a December 2017 close to
